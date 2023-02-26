@@ -1,6 +1,3 @@
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum TokenType {
     // identifiers + literals
@@ -8,12 +5,26 @@ pub enum TokenType {
     Number,
 
     // operators
+    Equal,
+    Lower,
+    LowerEqual,
+    Greater,
+    GreaterEqual,
+
+    // delimiters
     SemiColon,
+    Dot,
+    Comma,
+    LeftParen,
+    RightParen,
 
     // keywords
     Select,
     From,
     Where,
+    Is,
+    Not,
+    Null,
     OrderBy,
 
     Insert,
@@ -27,25 +38,6 @@ pub struct Token {
     pub literal: String,
 }
 
-// pub struct Definition {
-//     pub name: String,
-//     pub operand_widths: Vec<i16>,
-// }
-
-// lazy_static! {
-//     static ref DEFINITIONS: HashMap<TokenType, Definition> = {
-//         let mut m = HashMap::new();
-//         m.insert(
-//             TokenType::Select,
-//             Definition {
-//                 name: String::from("select"),
-//                 operand_widths: vec![2],
-//             },
-//         );
-//         m
-//     };
-// }
-
 fn lookup_identifier(identifier: &str) -> TokenType {
     return match identifier.to_lowercase().as_str() {
         "select" => TokenType::Select,
@@ -54,6 +46,9 @@ fn lookup_identifier(identifier: &str) -> TokenType {
         "insert" => TokenType::Insert,
         "update" => TokenType::Update,
         "delete" => TokenType::Delete,
+        "is" => TokenType::Is,
+        "not" => TokenType::Not,
+        "null" => TokenType::Null,
         _ => TokenType::Identifier,
     };
 }
@@ -93,6 +88,64 @@ impl Lexer {
                 token_type: TokenType::SemiColon,
                 literal: current_char.to_string(),
             }),
+            ',' => Some(Token {
+                token_type: TokenType::Comma,
+                literal: current_char.to_string(),
+            }),
+            '.' => Some(Token {
+                token_type: TokenType::Dot,
+                literal: current_char.to_string(),
+            }),
+            '=' => Some(Token {
+                token_type: TokenType::Equal,
+                literal: current_char.to_string(),
+            }),
+            '(' => Some(Token {
+                token_type: TokenType::LeftParen,
+                literal: current_char.to_string(),
+            }),
+            ')' => Some(Token {
+                token_type: TokenType::RightParen,
+                literal: current_char.to_string(),
+            }),
+            '>' => {
+                let next_char = self.peek_char();
+                if next_char.is_none() {
+                    Some(Token {
+                        token_type: TokenType::Greater,
+                        literal: current_char.to_string(),
+                    })
+                } else if next_char.unwrap() == '=' {
+                    Some(Token {
+                        token_type: TokenType::GreaterEqual,
+                        literal: ">=".to_string(),
+                    })
+                } else {
+                    Some(Token {
+                        token_type: TokenType::Greater,
+                        literal: current_char.to_string(),
+                    })
+                }
+            }
+            '<' => {
+                let next_char = self.peek_char();
+                if next_char.is_none() {
+                    Some(Token {
+                        token_type: TokenType::Lower,
+                        literal: current_char.to_string(),
+                    })
+                } else if next_char.unwrap() == '=' {
+                    Some(Token {
+                        token_type: TokenType::LowerEqual,
+                        literal: "<=".to_string(),
+                    })
+                } else {
+                    Some(Token {
+                        token_type: TokenType::Lower,
+                        literal: current_char.to_string(),
+                    })
+                }
+            }
             _ => {
                 if current_char.is_alphabetic() {
                     let literal = self.read_identifier();
@@ -119,7 +172,7 @@ impl Lexer {
         let beginning_pos = self.position;
 
         while let Some(current_char) = self.current_char {
-            if current_char.is_alphanumeric() {
+            if current_char.is_alphanumeric() || current_char == '_' {
                 self.read_char();
             } else {
                 break;
@@ -130,7 +183,7 @@ impl Lexer {
             .input
             .chars()
             .skip(beginning_pos)
-            .take(self.position)
+            .take(self.position - beginning_pos)
             .collect();
     }
 
@@ -149,7 +202,7 @@ impl Lexer {
             .input
             .chars()
             .skip(beginning_pos)
-            .take(self.position)
+            .take(self.position - beginning_pos)
             .collect();
     }
 
@@ -164,11 +217,19 @@ impl Lexer {
         }
     }
 
+    fn peek_char(&self) -> Option<char> {
+        return if self.read_position >= self.input.len() {
+            None
+        } else {
+            self.input.chars().nth(self.read_position)
+        };
+    }
+
     fn read_char(&mut self) {
         if self.read_position >= self.input.len() {
             self.current_char = None;
         } else {
-            self.current_char = self.input.chars().nth(self.read_position as usize);
+            self.current_char = self.input.chars().nth(self.read_position);
         }
 
         self.position = self.read_position;
@@ -176,14 +237,12 @@ impl Lexer {
     }
 }
 
-pub struct Parser {}
-
 #[cfg(test)]
 mod tests {
-    use crate::sql::{Lexer, TokenType};
+    use crate::sql::lexer::{Lexer, TokenType};
 
     #[test]
-    fn it_works() {
+    fn simple_select_of_number() {
         let input = "select 1;";
         let mut lexer = Lexer::new(input.to_string());
 
@@ -198,5 +257,31 @@ mod tests {
         let token = lexer.next_token();
         assert!(token.is_some());
         assert_eq!(TokenType::SemiColon, token.unwrap().token_type);
+    }
+
+    #[test]
+    fn simple_select_of_column_from_table() {
+        let input = "select foo from my_table;";
+        let mut lexer = Lexer::new(input.to_string());
+
+        let token = lexer.next_token();
+        assert!(token.is_some());
+        assert_eq!(TokenType::Select, token.unwrap().token_type);
+
+        let token = lexer.next_token();
+        assert!(token.is_some());
+        let token = token.unwrap();
+        assert_eq!(TokenType::Identifier, token.token_type);
+        assert_eq!("foo", token.literal.as_str());
+
+        let token = lexer.next_token();
+        assert!(token.is_some());
+        assert_eq!(TokenType::From, token.unwrap().token_type);
+
+        let token = lexer.next_token();
+        assert!(token.is_some());
+        let token = token.unwrap();
+        assert_eq!(TokenType::Identifier, token.token_type);
+        assert_eq!("my_table", token.literal.as_str());
     }
 }
