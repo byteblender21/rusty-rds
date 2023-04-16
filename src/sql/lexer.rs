@@ -74,6 +74,23 @@ impl Lexer {
         return lexer;
     }
 
+    pub fn tokenize_str(&mut self) -> Result<Vec<Token>, &'static str> {
+        let mut tokens = vec![];
+
+        while !self.is_at_end() {
+            match self.next_token() {
+                None => {
+                    return Err("Invalid token found")
+                }
+                Some(token) => {
+                    tokens.push(token)
+                }
+            }
+        }
+
+        return Ok(tokens)
+    }
+
     pub fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
 
@@ -218,7 +235,7 @@ impl Lexer {
     }
 
     fn peek_char(&self) -> Option<char> {
-        return if self.read_position >= self.input.len() {
+        return if self.is_at_end() {
             None
         } else {
             self.input.chars().nth(self.read_position)
@@ -226,7 +243,7 @@ impl Lexer {
     }
 
     fn read_char(&mut self) {
-        if self.read_position >= self.input.len() {
+        if self.is_at_end() {
             self.current_char = None;
         } else {
             self.current_char = self.input.chars().nth(self.read_position);
@@ -234,6 +251,10 @@ impl Lexer {
 
         self.position = self.read_position;
         self.read_position += 1;
+    }
+
+    fn is_at_end(&self) -> bool {
+        return self.read_position >= self.input.len()
     }
 }
 
@@ -283,5 +304,16 @@ mod tests {
         let token = token.unwrap();
         assert_eq!(TokenType::Identifier, token.token_type);
         assert_eq!("my_table", token.literal.as_str());
+    }
+
+    #[test]
+    fn simple_select_of_column_from_table_to_token_list() {
+        let input = "select foo from my_table;";
+        let mut lexer = Lexer::new(input.to_string());
+
+        match lexer.tokenize_str() {
+            Ok(r) => assert_eq!(4, r.len()),
+            Err(err) => assert!(false, "{}", err)
+        }
     }
 }
