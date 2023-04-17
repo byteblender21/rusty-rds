@@ -1,4 +1,4 @@
-use crate::sql::ast::{Ast, Node, SelectStatement, Statement};
+use crate::sql::ast::{Ast, Expression, SelectStatement, Statement};
 use crate::sql::lexer::{Token, TokenType};
 
 pub struct Parser {
@@ -52,7 +52,16 @@ impl Parser {
     }
 
     fn parse_select(&mut self) -> Result<Box<SelectStatement>, &'static str> {
-        return Ok(Box::new(SelectStatement {}))
+        let statement = SelectStatement::new();
+        while !self.is_at_end() {
+            //
+        }
+
+        return Ok(Box::new(statement))
+    }
+
+    fn parse_expression(&mut self) -> Result<Box<dyn Expression>, &'static str> {
+        return Err("<not yet implemented>")
     }
 
     fn peek_token(&self) -> Option<&Token> {
@@ -84,8 +93,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::sql::ast::Ast;
-    use crate::sql::lexer::{Lexer, Token};
+    use crate::sql::lexer::{Lexer};
     use crate::sql::parser::Parser;
 
     #[test]
