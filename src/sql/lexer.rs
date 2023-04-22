@@ -79,16 +79,17 @@ impl Lexer {
 
         while !self.is_at_end() {
             match self.next_token() {
-                None => {
-                    return Err("Invalid token found")
-                }
-                Some(token) => {
-                    tokens.push(token)
-                }
+                None => return Err("Invalid token found"),
+                Some(token) => tokens.push(token),
             }
         }
 
-        return Ok(tokens)
+        match self.next_token() {
+            None => return Err("Invalid token found"),
+            Some(token) => tokens.push(token),
+        }
+
+        return Ok(tokens);
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
@@ -254,7 +255,7 @@ impl Lexer {
     }
 
     fn is_at_end(&self) -> bool {
-        return self.read_position >= self.input.len()
+        return self.read_position >= self.input.len();
     }
 }
 
@@ -312,8 +313,8 @@ mod tests {
         let mut lexer = Lexer::new(input.to_string());
 
         match lexer.tokenize_str() {
-            Ok(r) => assert_eq!(4, r.len()),
-            Err(err) => assert!(false, "{}", err)
+            Ok(r) => assert_eq!(5, r.len()),
+            Err(err) => assert!(false, "{}", err),
         }
     }
 }
