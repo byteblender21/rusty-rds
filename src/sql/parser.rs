@@ -1,4 +1,4 @@
-use crate::sql::ast::{Ast, Expression, SelectStatement, Statement};
+use crate::sql::ast::{Ast, Expression, NumberExpr, SelectStatement, Statement};
 use crate::sql::lexer::{Token, TokenType};
 
 pub struct Parser {
@@ -26,7 +26,7 @@ impl Parser {
             }
         }
 
-        return Ok(Ast { nodes });
+        return Ok(Ast { statements: nodes });
     }
 
     pub fn parse_statement(&mut self) -> Option<Box<dyn Statement>> {
@@ -45,16 +45,41 @@ impl Parser {
     }
 
     fn parse_select(&mut self) -> Result<Box<SelectStatement>, &'static str> {
-        let statement = SelectStatement::new();
+        let mut statement = SelectStatement::new();
         while !self.is_at_end() {
-            //
+            match self.parse_expression() {
+                Ok(expr) => statement.selection.push(expr),
+                Err(err) => return Err(err),
+            }
+
+            let next_token = self.peek_token();
+            if next_token.is_none() {
+                return Err("Select was not finished");
+            }
+
+            match next_token.unwrap().token_type {
+                TokenType::From | TokenType::SemiColon => break,
+                _ => continue,
+            }
+        }
+
+        // break if there is semicolon
+        if self.peek_token().unwrap().token_type == TokenType::SemiColon {
+            self.read_token();
+            return Ok(Box::new(statement));
         }
 
         return Ok(Box::new(statement));
     }
 
     fn parse_expression(&mut self) -> Result<Box<dyn Expression>, &'static str> {
-        return Err("<not yet implemented>");
+        return match self.read_token() {
+            None => Err("Invalid token found"),
+            Some(token) => match token.token_type {
+                TokenType::Number => Ok(Box::new(NumberExpr::new(token.literal.to_string()))),
+                _ => Err("Not supported expression"),
+            },
+        };
     }
 
     fn peek_token(&self) -> Option<&Token> {
@@ -104,7 +129,10 @@ mod tests {
 
         match parser.create_ast() {
             Ok(ast) => {
-                assert_eq!(1, ast.nodes.len());
+                assert_eq!(1, ast.statements.len());
+
+                let select_statement = ast.statements.first().unwrap();
+                assert_eq!(input, select_statement.to_string());
             }
             Err(err) => {
                 assert!(false, "Parsing failed: {}", err)
