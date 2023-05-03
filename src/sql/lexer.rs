@@ -10,6 +10,7 @@ pub enum TokenType {
     LowerEqual,
     Greater,
     GreaterEqual,
+    Star,
 
     // delimiters
     SemiColon,
@@ -32,7 +33,7 @@ pub enum TokenType {
     Delete,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub literal: String,
@@ -74,18 +75,23 @@ impl Lexer {
         return lexer;
     }
 
-    pub fn tokenize_str(&mut self) -> Result<Vec<Token>, &'static str> {
+    pub fn tokenize_str(&mut self) -> Result<Vec<Token>, String> {
         let mut tokens = vec![];
 
         while !self.is_at_end() {
             match self.next_token() {
-                None => return Err("Invalid token found"),
+                None => {
+                    return Err(format!(
+                        "Invalid token found: {}",
+                        self.current_char.unwrap()
+                    ))
+                }
                 Some(token) => tokens.push(token),
             }
         }
 
         match self.next_token() {
-            None => return Err("Invalid token found"),
+            None => return Err(format!("Invalid token found: {:?}", self.current_char)),
             Some(token) => tokens.push(token),
         }
 
@@ -99,6 +105,7 @@ impl Lexer {
             return None;
         }
 
+        let mut has_char_consumed = false;
         let current_char = self.current_char.unwrap();
 
         let token = match current_char {
@@ -116,6 +123,10 @@ impl Lexer {
             }),
             '=' => Some(Token {
                 token_type: TokenType::Equal,
+                literal: current_char.to_string(),
+            }),
+            '*' => Some(Token {
+                token_type: TokenType::Star,
                 literal: current_char.to_string(),
             }),
             '(' => Some(Token {
@@ -166,6 +177,7 @@ impl Lexer {
             }
             _ => {
                 if current_char.is_alphabetic() {
+                    has_char_consumed = true;
                     let literal = self.read_identifier();
 
                     Some(Token {
@@ -173,6 +185,7 @@ impl Lexer {
                         literal,
                     })
                 } else if current_char.is_numeric() {
+                    has_char_consumed = true;
                     Some(Token {
                         token_type: TokenType::Number,
                         literal: self.read_number(),
@@ -182,6 +195,10 @@ impl Lexer {
                 }
             }
         };
+
+        if !has_char_consumed {
+            self.read_char();
+        }
 
         return token;
     }
@@ -310,6 +327,17 @@ mod tests {
     #[test]
     fn simple_select_of_column_from_table_to_token_list() {
         let input = "select foo from my_table;";
+        let mut lexer = Lexer::new(input.to_string());
+
+        match lexer.tokenize_str() {
+            Ok(r) => assert_eq!(5, r.len(), "{:?}", r),
+            Err(err) => assert!(false, "{}", err),
+        }
+    }
+
+    #[test]
+    fn simple_select_all_from_table_to_token_list() {
+        let input = "select * from my_table;";
         let mut lexer = Lexer::new(input.to_string());
 
         match lexer.tokenize_str() {

@@ -16,45 +16,45 @@ impl Parser {
         };
     }
 
-    pub fn create_ast(&mut self) -> Result<Ast, &'static str> {
+    pub fn create_ast(&mut self) -> Result<Ast, String> {
         let mut nodes = vec![];
 
         while !self.is_at_end() {
             match self.parse_statement() {
-                None => return Err("Could not parse next node from tokens"),
-                Some(result) => nodes.push(result),
+                Err(err) => return Err(format!("Error during parsing: {}", err)),
+                Ok(result) => nodes.push(result),
             }
         }
 
         return Ok(Ast { statements: nodes });
     }
 
-    pub fn parse_statement(&mut self) -> Option<Box<dyn Statement>> {
+    pub fn parse_statement(&mut self) -> Result<Box<dyn Statement>, String> {
         let token = match self.read_token() {
-            None => return None,
+            None => return Err("No token found".to_string()),
             Some(r) => r,
         };
 
         return match token.token_type {
             TokenType::Select => match self.parse_select() {
-                Ok(r) => Some(r),
-                Err(_) => None,
+                Ok(r) => Ok(r),
+                Err(err) => Err(err.to_string()),
             },
-            _ => None,
+            _ => Err(format!("Could not handle token: {:?}", token.clone())),
         };
     }
 
-    fn parse_select(&mut self) -> Result<Box<SelectStatement>, &'static str> {
+    fn parse_select(&mut self) -> Result<Box<SelectStatement>, String> {
         let mut statement = SelectStatement::new();
         while !self.is_at_end() {
             match self.parse_expression() {
                 Ok(expr) => statement.selection.push(expr),
-                Err(err) => return Err(err),
+                Err(err) => return Err(err.to_string()),
             }
 
             let next_token = self.peek_token();
             if next_token.is_none() {
-                return Err("Select was not finished");
+                return Err("Select was not finished".to_string());
             }
 
             match next_token.unwrap().token_type {
@@ -72,12 +72,12 @@ impl Parser {
         return Ok(Box::new(statement));
     }
 
-    fn parse_expression(&mut self) -> Result<Box<dyn Expression>, &'static str> {
+    fn parse_expression(&mut self) -> Result<Box<dyn Expression>, String> {
         return match self.read_token() {
-            None => Err("Invalid token found"),
+            None => Err("Invalid token found".to_string()),
             Some(token) => match token.token_type {
                 TokenType::Number => Ok(Box::new(NumberExpr::new(token.literal.to_string()))),
-                _ => Err("Not supported expression"),
+                _ => Err(format!("Not supported expression: {:?}", token.clone())),
             },
         };
     }
@@ -116,6 +116,33 @@ mod tests {
     #[test]
     fn simple_select_of_number() {
         let input = "select 1;";
+        let mut lexer = Lexer::new(input.to_string());
+        let tokens = match lexer.tokenize_str() {
+            Ok(result) => result,
+            Err(err) => {
+                assert!(false, "Lexing failed: {}", err);
+                return;
+            }
+        };
+
+        let mut parser = Parser::new(tokens);
+
+        match parser.create_ast() {
+            Ok(ast) => {
+                assert_eq!(1, ast.statements.len());
+
+                let select_statement = ast.statements.first().unwrap();
+                assert_eq!(input, select_statement.to_string());
+            }
+            Err(err) => {
+                assert!(false, "Parsing failed: {}", err)
+            }
+        }
+    }
+
+    #[test]
+    fn simple_select_all_from_table() {
+        let input = "select * from table_name;";
         let mut lexer = Lexer::new(input.to_string());
         let tokens = match lexer.tokenize_str() {
             Ok(result) => result,
